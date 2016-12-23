@@ -1,0 +1,113 @@
+---
+title: 'Machine Learning Prediction Assignment: Human Activity Analysis'
+author: "John Papazian"
+date: "December 23, 2016"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+  word_document: default
+---
+
+## Summary 
+
+To complete this assignment, I subset the number of variables at the start. Many of the variables in the PML Testing data are empty, so we should not include them in the models. We cannot use the PML Testing data for model validation because its outcome variable is missing. The PML Testing data can only be used for completing the quiz. So, I partition the PML Training data into a "training" dataset and a "testing"" dataset using a 10% and 90% split. I explore three different Machine Learning techniques: (1) Random Forest, (2) Gradient Boosting, and (3) Linear Discriminant Analysis. I develop models based upon the "training" data, and then I make predictions using the "testing" data. The Random Forest model had the highest accuracy in cross-validation. Thus, I choose to use the Random Forest model to answer the quiz, and I obtained an accuracy score of 90%.
+
+
+## Initialization
+
+I first activate the libraries relevant to this assignment. There are a wide variety of libraries for Machine Learning. Also, I set the seed to ensure reproducibility of the results.
+
+```{r activate_libraries, echo=TRUE}
+library(AppliedPredictiveModeling)
+library(caret)
+library(ElemStatLearn)
+library(pgmm)
+library(rpart)
+library(gbm)
+library(lubridate)
+library(forecast)
+library(e1071)
+library(randomForest)
+library(plyr)
+set.seed(123)
+```
+
+I set the current working directory and then load the two CSV files. These two PML files for Training and Testing are from the Human Activity Recognition (HAR) project:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+```{r load_data, echo=TRUE}
+setwd("C:/Users/jopapa/Documents/Coursera") 
+pml_training <- read.csv("pml-training.csv")
+pml_testing <- read.csv("pml-testing.csv")
+```
+
+
+## Configure Variables
+
+A lot of the variables in the PML Testing data are empty. Thus, I subset the non-empty variables in the PML Testing data because it is necessary to model on just these non-empty variables. Moreover, I remove extraneous variables (e.g. user_name and timestamp) that are not relevant to modeling. I create a list of the relevant variables to be used for modeling.
+
+```{r reduce_variables, echo=TRUE}
+empty_vars <- apply(pml_testing,2, function(x)all(is.na(x)))
+non_empty_vars <- names(empty_vars[empty_vars==0])
+vars_to_remove <- c("problem_id","X","user_name","raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","new_window","num_window")
+vars_to_use <- non_empty_vars[! non_empty_vars %in% vars_to_remove]
+```
+
+I include the outcome variable, classe, to the list of relevant variables to use for modeling. I subset variable in the PML Training data based upon this list of relevant variables. I summarize the distribution of the outcome classe variable.
+
+```{r expore_data, echo=TRUE}
+vars_to_use <- c("classe",vars_to_use)
+pml_training_redux <- pml_training[vars_to_use]
+summary(pml_training_redux$classe)
+plot(pml_training_redux$classe, main="Frequency of Outcome Variable Classe in Training Data",xlab="Categories of Classe",ylab="Frequency")
+```
+
+There are two PML files for Training and Testing from the Human Activity Recognition (HAR) project. We cannot use the PML Testing data for model validation because its outcome variable is missing. The PML Testing data is used only for the quiz. Thus, I partition the PML Training data into a "training" dataset and a "testing"" dataset using the createDataPartition() function. I partition 10% of the PML Training data into "training" and 90% into "testing" for cross-validation. I chose a 90% and 10% spit in order to speed up the modeling calculations. In truth, it would be better to partition a 50% and 50% split. However, it is slow to compute a Random Forest model with a large number of observations.
+
+```{r partioning, echo=TRUE}
+in_training = createDataPartition(pml_training_redux$classe, p = 1/10)[[1]]
+training = pml_training_redux[ in_training,]
+testing = pml_training_redux[-in_training,]
+```
+
+
+## Model, Predict, & Cross-Validate
+
+I explore three different techniques of Machine Learning: (1) Random Forest, (2) Gradient Boosting, and (3) Linear Discriminant Analysis. I use the "training" data to build these three types of models.
+
+```{r modeling, echo=TRUE}
+model_RF <- train(classe ~ ., method="rf", data=training)
+model_GBM <- train(classe ~ ., method="gbm", data=training, verbose=FALSE)
+model_LDA <- train(classe ~ ., method="lda", data=training)
+```
+
+I make predictions on the "testing" data for models built on the "training" data. I predict using the three Machine Learning techniques: (1) Random Forest, (2) Gradient Boosting, and (3) Linear Discriminant Analysis. 
+
+```{r predicting, echo=TRUE}
+pred_RF <- predict(model_RF, newdata=testing)
+pred_GBM <- predict(model_GBM, newdata=testing)
+pred_LDA <- predict(model_LDA, newdata=testing)
+```
+
+
+## Use Best Model to Answer Quiz
+
+I use cross-validation to determine how well each Machine Learning technique performs. I develop models based upon the "training" data, and then predict using the "testing" data. Through cross-validation I compute how well each technique succeeds in accurately predicting the correct category of the outcome variable classe.
+
+```{r cross_validation, echo=TRUE}
+sum(pred_RF==testing$classe)/nrow(testing)
+sum(pred_GBM==testing$classe)/nrow(testing)
+sum(pred_LDA==testing$classe)/nrow(testing)
+```
+
+The Random Forest model had the highest accuracy of 94.6% in cross-validation.   The Gradient Boosting model had the second highest accuracy of 93.4% in cross-validation. The Linear Discriminant Analysis had the lowest accuracy of 69.9% in cross-validation.
+
+```{r answer_quiz, echo=TRUE}
+pred_RF <- predict(model_RF, newdata=pml_testing)
+quiz_answers <- data.frame(predicted_classe=pred_RF,pml_testing)
+```
+
+Thus, I choose to use the Random Forest model to predict the outcome variable of classe for the 20 observations in the PML Testing data. I obtained an accuracy of 90% after submitting my answers for the Course Project Prediction Quiz.
